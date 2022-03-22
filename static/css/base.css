@@ -38,6 +38,19 @@ body {
     color: white;
 }
 
+.btn-outline-black {
+    background: white;
+    border: 1px solid black;
+    color: black !important; /* use important to override link colours for <a> elements */ 
+}
+
+.btn-outline-black:hover,
+.btn-outline-black:active,
+.btn-outline-black:focus {
+    background: black;
+    color: white !important;
+}
+
 .shop-now-button:hover,
 .shop-now-button:active,
 .shop-now-button:focus,
