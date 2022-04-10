@@ -5,16 +5,16 @@ from django.conf import settings
 
 from .forms import OrderForm
 from .models import Order, OrderLineItem
+
 from products.models import Product
-from profiles.forms import UserProfileForm
 from profiles.models import UserProfile
+from profiles.forms import UserProfileForm
 from bag.contexts import bag_contents
 
 import stripe
 import json
 
 
-# Create your views here.
 @require_POST
 def cache_checkout_data(request):
     try:
@@ -29,7 +29,7 @@ def cache_checkout_data(request):
     except Exception as e:
         messages.error(request, 'Sorry, your payment cannot be \
             processed right now. Please try again later.')
-        return HttpResponse(content=0, status=400)
+        return HttpResponse(content=e, status=400)
 
 
 def checkout(request):
@@ -50,13 +50,14 @@ def checkout(request):
             'street_address2': request.POST['street_address2'],
             'county': request.POST['county'],
         }
+
         order_form = OrderForm(form_data)
         if order_form.is_valid():
             order = order_form.save(commit=False)
             pid = request.POST.get('client_secret').split('_secret')[0]
             order.stripe_pid = pid
             order.original_bag = json.dumps(bag)
-            order.save(0)
+            order.save()
             for item_id, item_data in bag.items():
                 try:
                     product = Product.objects.get(id=item_id)
@@ -83,17 +84,19 @@ def checkout(request):
                     )
                     order.delete()
                     return redirect(reverse('view_bag'))
+
+            # Save the info to the user's profile if all is well
             request.session['save_info'] = 'save-info' in request.POST
             return redirect(reverse('checkout_success', args=[order.order_number]))
         else:
             messages.error(request, 'There was an error with your form. \
                 Please double check your information.')
-    else: 
+    else:
         bag = request.session.get('bag', {})
         if not bag:
             messages.error(request, "There's nothing in your bag at the moment")
             return redirect(reverse('products'))
-        
+
         current_bag = bag_contents(request)
         total = current_bag['grand_total']
         stripe_total = round(total * 100)
@@ -103,6 +106,7 @@ def checkout(request):
             currency=settings.STRIPE_CURRENCY,
         )
 
+        # Attempt to prefill the form with any info the user maintains in their profile
         if request.user.is_authenticated:
             try:
                 profile = UserProfile.objects.get(user=request.user)
@@ -125,7 +129,7 @@ def checkout(request):
     if not stripe_public_key:
         messages.warning(request, 'Stripe public key is missing. \
             Did you forget to set it in your environment?')
-    
+
     template = 'checkout/checkout.html'
     context = {
         'order_form': order_form,
@@ -157,7 +161,7 @@ def checkout_success(request, order_number):
                 'default_postcode': order.postcode,
                 'default_town_or_city': order.town_or_city,
                 'default_street_address1': order.street_address1,
-                'deafult_street_address2': order.street_address2,
+                'default_street_address2': order.street_address2,
                 'default_county': order.county,
             }
             user_profile_form = UserProfileForm(profile_data, instance=profile)
@@ -167,7 +171,7 @@ def checkout_success(request, order_number):
     messages.success(request, f'Order successfully processed! \
         Your order number is {order_number}. A confirmation \
         email will be sent to {order.email}.')
-    
+
     if 'bag' in request.session:
         del request.session['bag']
 
